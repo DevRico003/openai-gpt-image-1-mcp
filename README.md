@@ -180,21 +180,29 @@ Add this server to your MCP configuration for Claude Desktop, Windsurf, or any o
 result = await generate_image(
     prompt="A photorealistic flying cat with wings soaring through clouds",
     size="1024x1024",
-    quality="high"
+    quality="high",
+    return_image=True  # Get the image data directly (default is True)
 )
 
-# The result contains paths to the saved image
+# By default, the result contains the image data
+image_data = result['image_data']  # Base64 encoded image data
+mime_type = result['mime_type']    # "image/png"
+
+# The result also contains paths to the saved image on the server
 saved_path = result['saved_path']     # Absolute path where the image was saved
 relative_path = result['relative_path']  # Relative path from working directory
 filename = result['filename']         # The filename of the generated image
 directory = result['directory']       # The directory where images are stored
 
-print(f"Image generated successfully!")
-print(f"Image saved at: {saved_path}")
-print(f"Relative path: {relative_path}")
+# Save the image locally from the base64 data
+import base64
+with open(f"local-{filename}", "wb") as f:
+    f.write(base64.b64decode(image_data))
 
-# If you're running a client on the same machine or with access to the 
-# server's filesystem, you can use these paths to access the generated image
+print(f"Image saved locally as: local-{filename}")
+
+# Or display it in an HTML context
+html_img = f'<img src="data:{mime_type};base64,{image_data}" alt="Flying cat">'
 ```
 
 ### Editing an Image
@@ -205,32 +213,57 @@ result = await edit_image(
     prompt="Add a wizard hat to the cat",
     image_paths=["/path/to/cat_image.png"],
     size="1024x1024",
-    quality="high"
+    quality="high",
+    return_image=True  # Get the image data directly
 )
 
-# Access the edited image path information
-saved_path = result['saved_path']
-relative_path = result['relative_path']
+# Use the base64 data to save or display the image
+image_data = result['image_data']
 filename = result['filename']
 
-print(f"Edited image saved at: {saved_path}")
+# Save locally
+import base64
+with open(f"edited-{filename}", "wb") as f:
+    f.write(base64.b64decode(image_data))
 ```
 
 ### Client-Side Image Handling
 
-The MCP server saves generated images in the 'ai-images' directory and returns paths to these images. This approach is designed for situations where:
+The MCP server provides two ways to access generated images:
 
-1. The client has direct filesystem access to the server (e.g., when running locally)
-2. The client and server use a shared filesystem (e.g., with mounted volumes in Docker)
-3. The data returned by the MCP server is passed to another process with access to the server's filesystem
+1. **Direct Image Data**: By default, the image is returned as base64-encoded data in the `image_data` field. This is ideal when:
+   - You don't have direct filesystem access to the server (e.g., when running in Docker)
+   - You want to display the image directly in a web application
+   - You need to save the image locally on the client side
 
-For Docker deployments, you can use volume mounts to make the images directory accessible to the host:
+2. **File Paths**: The tools also return file paths where the image is saved on the server. This is useful when:
+   - The client has direct filesystem access to the server
+   - You're using volume mounts in Docker
+   - You need to reference the image location for other server-side processes
+
+### Performance Considerations
+
+If you're concerned about token limits or don't need the image data directly:
+
+```python
+# Generate image without returning the base64 data
+result = await generate_image(
+    prompt="A photorealistic flying cat with wings soaring through clouds",
+    return_image=False  # Don't include image data in the response
+)
+
+# Now you only have path information
+saved_path = result['saved_path']
+filename = result['filename']
+```
+
+For Docker deployments with shared volumes:
 
 ```bash
 docker run -v $(pwd)/ai-images:/app/ai-images --env-file .env -p 8050:8050 openai-gpt-image-1-mcp
 ```
 
-This will make generated images available in the `ai-images` directory on your host machine.
+This way, you can access generated images in the `ai-images` directory on your host machine, even if you set `return_image=False`.
 
 ## License
 

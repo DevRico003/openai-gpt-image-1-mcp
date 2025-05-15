@@ -92,7 +92,8 @@ async def generate_image(
     size: Optional[Literal["1024x1024", "1536x1024", "1024x1536", "auto"]] = "auto", # Size options
     quality: Optional[Literal["low", "medium", "high", "auto"]] = "auto", # Quality options
     user: Optional[str] = None, # Optional end-user identifier
-    save_filename: Optional[str] = None # Optional: specify filename (without extension)
+    save_filename: Optional[str] = None, # Optional: specify filename (without extension)
+    return_image: bool = True # Whether to return the image data directly
 ) -> dict:
     """
     Generates an image using OpenAI's gpt-image-1 model based on a text prompt.
@@ -107,6 +108,7 @@ async def generate_image(
         quality: Rendering quality ('low', 'medium', 'high', 'auto'). Default: 'auto'
         user: An optional unique identifier representing your end-user
         save_filename: Optional filename (without extension). If None, a default name based on the prompt and timestamp is used
+        return_image: Whether to return the image data directly as base64 (default: True)
 
     Returns:
         A dictionary containing:
@@ -115,6 +117,11 @@ async def generate_image(
         - relative_path: Relative path to the image from working directory
         - filename: Generated filename
         - directory: Directory where images are stored
+        
+        If return_image is True, it also includes:
+        - image_data: Base64 encoded image data
+        - mime_type: Image MIME type ("image/png")
+        
         Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'generate_image' called with prompt: '{prompt[:50]}...'")
@@ -186,14 +193,21 @@ async def generate_image(
             # Erstelle einen relativen Pfad für die Datei
             relative_path = get_relative_path(full_save_path)
             
-            # Return success und Pfadinformationen
-            return {
+            # Basisinformationen für die Rückgabe
+            result = {
                 "status": "success", 
                 "saved_path": full_save_path,
                 "relative_path": relative_path,
                 "filename": final_filename,
                 "directory": str(IMAGES_DIR)
             }
+            
+            # Füge Bilddaten hinzu, wenn gewünscht
+            if return_image:
+                result["image_data"] = image_b64
+                result["mime_type"] = "image/png"
+                
+            return result
 
         except Exception as save_e:
              logging.error(f"Failed to save image: {save_e}")
@@ -224,7 +238,8 @@ async def edit_image(
     size: Optional[Literal["1024x1024", "1536x1024", "1024x1536", "auto"]] = "auto", # Size options
     quality: Optional[Literal["low", "medium", "high", "auto"]] = "auto", # Quality options
     user: Optional[str] = None, # Optional end-user identifier
-    save_filename: Optional[str] = None # Optional: specify filename (without extension)
+    save_filename: Optional[str] = None, # Optional: specify filename (without extension)
+    return_image: bool = True # Whether to return the image data directly
 ) -> dict:
     """
     Edits an image or creates variations using OpenAI's gpt-image-1 model.
@@ -242,6 +257,7 @@ async def edit_image(
         quality: Rendering quality ('low', 'medium', 'high', 'auto'). Default: 'auto'
         user: An optional unique identifier representing your end-user
         save_filename: Optional filename (without extension). If None, a default name based on the prompt and timestamp is used
+        return_image: Whether to return the image data directly as base64 (default: True)
 
     Returns:
         A dictionary containing:
@@ -250,6 +266,11 @@ async def edit_image(
         - relative_path: Relative path to the image from working directory
         - filename: Generated filename
         - directory: Directory where images are stored
+        
+        If return_image is True, it also includes:
+        - image_data: Base64 encoded image data
+        - mime_type: Image MIME type ("image/png")
+        
         Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'edit_image' called with prompt: '{prompt[:50]}...'")
@@ -342,14 +363,21 @@ async def edit_image(
             # Erstelle einen relativen Pfad für die Datei
             relative_path = get_relative_path(full_save_path)
             
-            # Return success und Pfadinformationen
-            return {
+            # Basisinformationen für die Rückgabe
+            result = {
                 "status": "success", 
                 "saved_path": full_save_path,
                 "relative_path": relative_path,
                 "filename": final_filename,
                 "directory": str(IMAGES_DIR)
             }
+            
+            # Füge Bilddaten hinzu, wenn gewünscht
+            if return_image:
+                result["image_data"] = image_b64
+                result["mime_type"] = "image/png"
+                
+            return result
 
         except Exception as save_e:
             logging.error(f"Failed to save edited image: {save_e}")

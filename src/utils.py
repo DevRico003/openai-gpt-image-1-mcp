@@ -141,10 +141,13 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
             # Die storage.from_ Methode neu aufrufen und mit named arguments arbeiten
             bucket = supabase.storage.from_(bucket_name)
             
+            # BytesIO wird nicht direkt akzeptiert, daher konvertieren wir zu bytes
+            file_bytes = file_stream.getvalue()
+            
             # Explizite Parameter für mehr Stabilität
             res = bucket.upload(
                 path=storage_path,
-                file=file_stream,
+                file=file_bytes,
                 file_options={"content-type": content_type}
             )
             logging.info(f"Upload response: {res}")

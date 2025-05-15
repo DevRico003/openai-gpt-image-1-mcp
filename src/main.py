@@ -61,6 +61,17 @@ IMAGES_DIR.mkdir(exist_ok=True)
 STORAGE_MODE = get_storage_mode()
 logging.info(f"Using storage mode: {STORAGE_MODE}")
 
+# Versuche Supabase-Client vorab zu initialisieren, um Fehler früh zu erkennen
+if STORAGE_MODE == "supabase":
+    try:
+        from utils import get_supabase_client
+        # Test-Initialisierung des Clients
+        _test_client = get_supabase_client()
+        logging.info("Supabase client test initialization successful")
+    except Exception as e:
+        logging.error(f"Supabase initialization failed, falling back to local storage: {e}")
+        STORAGE_MODE = "local"
+
 # Get server host and port from environment variables
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = os.getenv("PORT", "8050")

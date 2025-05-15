@@ -22,7 +22,7 @@ def get_openai_client():
     
     if not api_key:
         logging.error("FATAL: OPENAI_API_KEY environment variable not set.")
-        sys.exit("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+        raise Exception("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
     
     # Create and return async client
     try:
@@ -31,7 +31,7 @@ def get_openai_client():
         return client
     except Exception as e:
         logging.error(f"Failed to initialize AsyncOpenAI client: {e}")
-        sys.exit(f"Failed to initialize AsyncOpenAI client: {e}")
+        raise Exception(f"Failed to initialize AsyncOpenAI client: {e}")
 
 def get_supabase_client() -> Client:
     """
@@ -50,7 +50,7 @@ def get_supabase_client() -> Client:
     
     if not supabase_url or not supabase_key:
         logging.error("FATAL: SUPABASE_URL and SUPABASE_KEY environment variables must be set.")
-        sys.exit("Supabase credentials not found. Please set the SUPABASE_URL and SUPABASE_KEY environment variables.")
+        raise Exception("Supabase credentials not found. Please set the SUPABASE_URL and SUPABASE_KEY environment variables.")
     
     # Log detailed info to help with troubleshooting
     logging.info(f"Initializing Supabase client with URL: {supabase_url}")
@@ -60,16 +60,16 @@ def get_supabase_client() -> Client:
         # Ensure URL doesn't have trailing slash
         supabase_url = supabase_url.rstrip("/")
         
-        # Create client with specific headers for self-hosted Supabase
-        client = create_client(supabase_url, supabase_key, {
-            "X-Client-Info": "openai-gpt-image-1-mcp"
-        })
+        # Create client without extra headers - die API akzeptiert nur die Grundparameter
+        client = create_client(supabase_url, supabase_key)
         
         logging.info("Supabase client initialized successfully.")
         return client
     except Exception as e:
         logging.error(f"Failed to initialize Supabase client: {e}")
-        sys.exit(f"Failed to initialize Supabase client: {e}")
+        # Anstatt sys.exit zu verwenden, was den Server abstürzen lässt, werfen wir eine Exception
+        # Dies erlaubt dem Hauptprogramm, auf den Fehler zu reagieren
+        raise Exception(f"Failed to initialize Supabase client: {e}")
 
 async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[str, str]:
     """
@@ -147,10 +147,20 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
             
             # Wenn URL nicht korrekt erscheint, erstelle sie manuell
             if not public_url or "null" in public_url:
-                # Für self-hosted Supabase manuell eine URL erstellen
+                # Für self-hosted Supabase manuell eine URL erstellen für öffentlichen Zugriff
                 base_url = os.getenv("SUPABASE_URL").rstrip("/")
+                
+                # Version 1: Standard-Pfad für Supabase Storage
                 public_url = f"{base_url}/storage/v1/object/public/{bucket_name}/{storage_path}"
-                logging.info(f"Generated custom public URL: {public_url}")
+                logging.info(f"Generated custom public URL v1: {public_url}")
+                
+                # Alternative URLs ausprobieren
+                alternate_url = f"{base_url}/storage/v1/object/{bucket_name}/{storage_path}"
+                logging.info(f"Alternative URL v2: {alternate_url}")
+                
+                # Noch eine Alternative
+                alt_url3 = f"{base_url}/api/rest/public-url?bucket={bucket_name}&object={storage_path}"
+                logging.info(f"Alternative URL v3: {alt_url3}")
         except Exception as url_err:
             logging.error(f"Error getting public URL: {url_err}")
             # Fallback: Manuell eine URL erstellen

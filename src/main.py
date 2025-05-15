@@ -22,7 +22,7 @@ from openai import AsyncOpenAI, APIConnectionError, RateLimitError, APIStatusErr
 from openai.types import ImagesResponse
 
 # Import utility functions
-from utils import get_openai_client
+from utils import get_openai_client, upload_image_to_supabase, get_storage_mode
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -56,6 +56,10 @@ async def openai_image_lifespan(server: FastMCP) -> AsyncIterator[OpenAIImageCon
 # Define constants for images directory
 IMAGES_DIR = Path("ai-images")
 IMAGES_DIR.mkdir(exist_ok=True)
+
+# Get storage mode - either "local" or "supabase"
+STORAGE_MODE = get_storage_mode()
+logging.info(f"Using storage mode: {STORAGE_MODE}")
 
 # Get server host and port from environment variables
 HOST = os.getenv("HOST", "0.0.0.0")
@@ -113,9 +117,17 @@ async def generate_image(
     Returns:
         A dictionary containing:
         - status: "success" or "error"
+        - filename: Generated filename
+        - storage_mode: "local" or "supabase" indicating where the image is stored
+        
+        If storage_mode is "supabase":
+        - image_url: Direct URL to view the image
+        - download_url: URL to download the image
+        - storage_path: Path in Supabase storage
+        
+        If storage_mode is "local":
         - saved_path: Absolute path where image was saved
         - relative_path: Relative path to the image from working directory
-        - filename: Generated filename
         - directory: Directory where images are stored
         
         If return_image is True, it also includes:
@@ -196,16 +208,46 @@ async def generate_image(
             # Basisinformationen für die Rückgabe
             result = {
                 "status": "success", 
-                "saved_path": full_save_path,
-                "relative_path": relative_path,
-                "filename": final_filename,
-                "directory": str(IMAGES_DIR)
+                "filename": final_filename
             }
             
-            # Füge Bilddaten hinzu, wenn gewünscht
-            if return_image:
-                result["image_data"] = image_b64
-                result["mime_type"] = "image/png"
+            # Wenn Supabase-Storage aktiviert ist, hochladen und URL zurückgeben
+            if STORAGE_MODE == "supabase":
+                try:
+                    # Upload the image to Supabase
+                    public_url, storage_path = await upload_image_to_supabase(image_bytes, final_filename)
+                    
+                    # Add Supabase info to result
+                    result["storage_mode"] = "supabase"
+                    result["image_url"] = public_url
+                    result["storage_path"] = storage_path
+                    result["download_url"] = public_url
+                    
+                    logging.info(f"Image uploaded to Supabase: {public_url}")
+                except Exception as supabase_err:
+                    logging.error(f"Supabase upload failed, falling back to local storage: {supabase_err}")
+                    # Fall back to local storage if Supabase upload fails
+                    result["storage_mode"] = "local"
+                    result["saved_path"] = full_save_path
+                    result["relative_path"] = relative_path
+                    result["directory"] = str(IMAGES_DIR)
+                    result["error_message"] = f"Supabase upload failed: {str(supabase_err)}"
+                    
+                    # Füge Bilddaten hinzu, wenn gewünscht
+                    if return_image:
+                        result["image_data"] = image_b64
+                        result["mime_type"] = "image/png"
+            else:
+                # Local storage info
+                result["storage_mode"] = "local"
+                result["saved_path"] = full_save_path
+                result["relative_path"] = relative_path
+                result["directory"] = str(IMAGES_DIR)
+                
+                # Füge Bilddaten hinzu, wenn gewünscht
+                if return_image:
+                    result["image_data"] = image_b64
+                    result["mime_type"] = "image/png"
                 
             return result
 
@@ -262,9 +304,17 @@ async def edit_image(
     Returns:
         A dictionary containing:
         - status: "success" or "error"
+        - filename: Generated filename
+        - storage_mode: "local" or "supabase" indicating where the image is stored
+        
+        If storage_mode is "supabase":
+        - image_url: Direct URL to view the image
+        - download_url: URL to download the image
+        - storage_path: Path in Supabase storage
+        
+        If storage_mode is "local":
         - saved_path: Absolute path where image was saved
         - relative_path: Relative path to the image from working directory
-        - filename: Generated filename
         - directory: Directory where images are stored
         
         If return_image is True, it also includes:
@@ -366,16 +416,46 @@ async def edit_image(
             # Basisinformationen für die Rückgabe
             result = {
                 "status": "success", 
-                "saved_path": full_save_path,
-                "relative_path": relative_path,
-                "filename": final_filename,
-                "directory": str(IMAGES_DIR)
+                "filename": final_filename
             }
             
-            # Füge Bilddaten hinzu, wenn gewünscht
-            if return_image:
-                result["image_data"] = image_b64
-                result["mime_type"] = "image/png"
+            # Wenn Supabase-Storage aktiviert ist, hochladen und URL zurückgeben
+            if STORAGE_MODE == "supabase":
+                try:
+                    # Upload the image to Supabase
+                    public_url, storage_path = await upload_image_to_supabase(image_bytes, final_filename)
+                    
+                    # Add Supabase info to result
+                    result["storage_mode"] = "supabase"
+                    result["image_url"] = public_url
+                    result["storage_path"] = storage_path
+                    result["download_url"] = public_url
+                    
+                    logging.info(f"Image uploaded to Supabase: {public_url}")
+                except Exception as supabase_err:
+                    logging.error(f"Supabase upload failed, falling back to local storage: {supabase_err}")
+                    # Fall back to local storage if Supabase upload fails
+                    result["storage_mode"] = "local"
+                    result["saved_path"] = full_save_path
+                    result["relative_path"] = relative_path
+                    result["directory"] = str(IMAGES_DIR)
+                    result["error_message"] = f"Supabase upload failed: {str(supabase_err)}"
+                    
+                    # Füge Bilddaten hinzu, wenn gewünscht
+                    if return_image:
+                        result["image_data"] = image_b64
+                        result["mime_type"] = "image/png"
+            else:
+                # Local storage info
+                result["storage_mode"] = "local"
+                result["saved_path"] = full_save_path
+                result["relative_path"] = relative_path
+                result["directory"] = str(IMAGES_DIR)
+                
+                # Füge Bilddaten hinzu, wenn gewünscht
+                if return_image:
+                    result["image_data"] = image_b64
+                    result["mime_type"] = "image/png"
                 
             return result
 

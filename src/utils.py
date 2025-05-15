@@ -1,7 +1,11 @@
 from openai import AsyncOpenAI
+from supabase import create_client, Client
 import logging
 import os
 import sys
+import uuid
+import time
+from typing import Optional, Tuple
 
 def get_openai_client():
     """
@@ -28,3 +32,91 @@ def get_openai_client():
     except Exception as e:
         logging.error(f"Failed to initialize AsyncOpenAI client: {e}")
         sys.exit(f"Failed to initialize AsyncOpenAI client: {e}")
+
+def get_supabase_client() -> Client:
+    """
+    Creates and returns a Supabase client with the appropriate credentials.
+    
+    Returns:
+        Client: The initialized Supabase client
+    
+    Raises:
+        SystemExit: If the required credentials are not found
+    """
+    # Get Supabase credentials from environment
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    
+    if not supabase_url or not supabase_key:
+        logging.error("FATAL: SUPABASE_URL and SUPABASE_KEY environment variables must be set.")
+        sys.exit("Supabase credentials not found. Please set the SUPABASE_URL and SUPABASE_KEY environment variables.")
+    
+    # Create and return client
+    try:
+        client = create_client(supabase_url, supabase_key)
+        logging.info("Supabase client initialized successfully.")
+        return client
+    except Exception as e:
+        logging.error(f"Failed to initialize Supabase client: {e}")
+        sys.exit(f"Failed to initialize Supabase client: {e}")
+
+async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[str, str]:
+    """
+    Uploads an image to Supabase Storage and returns the public URL.
+    
+    Args:
+        image_bytes: The image data as bytes
+        filename: Filename to use for the uploaded image
+        
+    Returns:
+        Tuple containing:
+        - Public URL of the uploaded image
+        - Path of the image in Supabase storage
+        
+    Raises:
+        Exception: If upload fails
+    """
+    try:
+        # Get Supabase client and bucket name
+        supabase = get_supabase_client()
+        bucket_name = os.getenv("SUPABASE_BUCKET", "image")
+        
+        # Generate a unique path for the image to prevent conflicts
+        timestamp = int(time.time())
+        unique_id = str(uuid.uuid4())[:8]
+        folder_path = f"openai-images/{timestamp}-{unique_id}"
+        storage_path = f"{folder_path}/{filename}"
+        
+        # Upload the image
+        res = supabase.storage.from_(bucket_name).upload(
+            path=storage_path,
+            file=image_bytes,
+            file_options={"content-type": "image/png"}
+        )
+        
+        if not res.get("Key"):
+            logging.error(f"Supabase upload failed: {res}")
+            raise Exception(f"Failed to upload image to Supabase: {res}")
+        
+        # Get the public URL for the uploaded image
+        public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+        
+        logging.info(f"Image uploaded successfully to Supabase: {public_url}")
+        return public_url, storage_path
+        
+    except Exception as e:
+        logging.error(f"Error uploading image to Supabase: {e}")
+        raise Exception(f"Failed to upload image to Supabase: {str(e)}")
+
+def get_storage_mode() -> str:
+    """
+    Gets the current storage mode from environment variables.
+    
+    Returns:
+        str: Either "local" or "supabase"
+    """
+    storage_mode = os.getenv("STORAGE_MODE", "local").lower()
+    if storage_mode not in ["local", "supabase"]:
+        logging.warning(f"Invalid STORAGE_MODE '{storage_mode}', falling back to 'local'")
+        return "local"
+    return storage_mode

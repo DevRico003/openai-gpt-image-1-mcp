@@ -182,7 +182,18 @@ result = await generate_image(
     size="1024x1024",
     quality="high"
 )
-print(f"Image saved at: {result['saved_path']}")
+
+# The image is returned as base64 data that can be used client-side
+image_base64 = result['image_base64']
+filename = result['filename']
+mime_type = result['mime_type']  # "image/png"
+
+# Example of saving the image on the client side
+import base64
+with open(f"local-{filename}", "wb") as f:
+    f.write(base64.b64decode(image_base64))
+
+print(f"Image saved locally as: local-{filename}")
 ```
 
 ### Editing an Image
@@ -195,8 +206,24 @@ result = await edit_image(
     size="1024x1024",
     quality="high"
 )
-print(f"Edited image saved at: {result['saved_path']}")
+
+# Use the base64 data to display or save the image on the client side
+image_base64 = result['image_base64']
+filename = result['filename']
+
+# Example of displaying the image in HTML
+html_img = f'<img src="data:image/png;base64,{image_base64}" alt="Edited cat with wizard hat">'
 ```
+
+### Client-Side Image Handling
+
+The MCP server returns image data in base64 format, allowing the client to:
+
+1. **Save the image locally** by decoding the base64 string
+2. **Display the image** directly in applications that support data URLs
+3. **Pass the image to other services** without needing to access the Docker container's filesystem
+
+This approach ensures that even when the MCP server runs in a Docker container, clients can still access and use the generated images.
 
 ## License
 

@@ -69,7 +69,8 @@ async def generate_image(
     save_filename: Optional[str] = None # Optional: specify filename (without extension)
 ) -> dict:
     """
-    Generates an image using OpenAI's gpt-image-1 model based on a text prompt and saves it.
+    Generates an image using OpenAI's gpt-image-1 model based on a text prompt.
+    Returns both the base64 data and saves the image locally.
 
     Args:
         ctx: The MCP context object (automatically passed)
@@ -82,8 +83,13 @@ async def generate_image(
         save_filename: Optional filename (without extension). If None, a default name based on the prompt and timestamp is used
 
     Returns:
-        A dictionary containing {"status": "success", "saved_path": "path/to/image.png"} on success,
-        or an error dictionary if the API call or saving fails.
+        A dictionary containing:
+        - status: "success" or "error"
+        - saved_path: Local path where image was saved
+        - filename: Generated filename
+        - image_base64: Base64 encoded image data for client-side usage
+        - mime_type: Image MIME type ("image/png")
+        Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'generate_image' called with prompt: '{prompt[:50]}...'")
 
@@ -146,13 +152,19 @@ async def generate_image(
             os.makedirs(save_dir, exist_ok=True)
             full_save_path = os.path.join(save_dir, final_filename)
 
-            # Save the image
+            # Save the image locally (optional in Docker environment)
             with open(full_save_path, "wb") as f:
                  f.write(image_bytes)
             logging.info(f"Image successfully saved to: {full_save_path}")
             
-            # Return success and path
-            return {"status": "success", "saved_path": full_save_path}
+            # Return success, path and base64 data for client-side usage
+            return {
+                "status": "success", 
+                "saved_path": full_save_path,
+                "filename": final_filename,
+                "image_base64": image_b64,
+                "mime_type": "image/png"
+            }
 
         except Exception as save_e:
              logging.error(f"Failed to save image: {save_e}")
@@ -186,7 +198,8 @@ async def edit_image(
     save_filename: Optional[str] = None # Optional: specify filename (without extension)
 ) -> dict:
     """
-    Edits an image or creates variations using OpenAI's gpt-image-1 model and saves it.
+    Edits an image or creates variations using OpenAI's gpt-image-1 model.
+    Returns both the base64 data and saves the image locally.
     Can use multiple input images as reference or perform inpainting with a mask.
 
     Args:
@@ -202,8 +215,13 @@ async def edit_image(
         save_filename: Optional filename (without extension). If None, a default name based on the prompt and timestamp is used
 
     Returns:
-        A dictionary containing {"status": "success", "saved_path": "path/to/image.png"} on success,
-        or an error dictionary if the API call or saving fails.
+        A dictionary containing:
+        - status: "success" or "error"
+        - saved_path: Local path where image was saved
+        - filename: Generated filename
+        - image_base64: Base64 encoded image data for client-side usage
+        - mime_type: Image MIME type ("image/png")
+        Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'edit_image' called with prompt: '{prompt[:50]}...'")
     logging.info(f"Input image paths: {image_paths}")
@@ -287,13 +305,19 @@ async def edit_image(
             os.makedirs(save_dir, exist_ok=True)
             full_save_path = os.path.join(save_dir, final_filename)
 
-            # Save the image
+            # Save the image locally (optional in Docker environment)
             with open(full_save_path, "wb") as f:
                 f.write(image_bytes)
             logging.info(f"Edited image successfully saved to: {full_save_path}")
             
-            # Return success and path
-            return {"status": "success", "saved_path": full_save_path}
+            # Return success, path and base64 data for client-side usage
+            return {
+                "status": "success", 
+                "saved_path": full_save_path,
+                "filename": final_filename,
+                "image_base64": image_b64,
+                "mime_type": "image/png"
+            }
 
         except Exception as save_e:
             logging.error(f"Failed to save edited image: {save_e}")

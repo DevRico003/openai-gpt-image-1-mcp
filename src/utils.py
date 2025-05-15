@@ -42,7 +42,7 @@ def get_supabase_client() -> Client:
         Client: The initialized Supabase client
     
     Raises:
-        SystemExit: If the required credentials are not found
+        Exception: If the required credentials are not found or client creation fails
     """
     # Get Supabase credentials from environment
     supabase_url = os.getenv("SUPABASE_URL")
@@ -60,14 +60,18 @@ def get_supabase_client() -> Client:
         # Ensure URL doesn't have trailing slash
         supabase_url = supabase_url.rstrip("/")
         
-        # Create client without extra headers - die API akzeptiert nur die Grundparameter
-        client = create_client(supabase_url, supabase_key)
+        # Create client with only the basic parameters
+        # Explicitly pass just these two parameters to avoid the dict error
+        client = create_client(
+            supabase_url=supabase_url,
+            supabase_key=supabase_key
+        )
         
         logging.info("Supabase client initialized successfully.")
         return client
     except Exception as e:
         logging.error(f"Failed to initialize Supabase client: {e}")
-        # Anstatt sys.exit zu verwenden, was den Server abstürzen lässt, werfen wir eine Exception
+        # Werfen einer Exception anstatt sys.exit zu verwenden
         # Dies erlaubt dem Hauptprogramm, auf den Fehler zu reagieren
         raise Exception(f"Failed to initialize Supabase client: {e}")
 
@@ -92,10 +96,15 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
         supabase = get_supabase_client()
         bucket_name = os.getenv("SUPABASE_BUCKET", "images")
         
+        # Ensure the bucket exists
+        if not ensure_bucket_exists(supabase, bucket_name):
+            logging.warning(f"Could not ensure bucket '{bucket_name}' exists. Proceeding anyway.")
+        
         # Sanitize filename - remove special characters and replace spaces with underscores
         # Convert to ASCII to remove non-ASCII characters like umlauts
         import re
         import unicodedata
+        import mimetypes
         
         def sanitize_filename(name):
             # Remove accents and convert to ASCII
@@ -119,55 +128,63 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
         from io import BytesIO
         file_stream = BytesIO(image_bytes)
         
-        # Detaillierte Debug-Informationen für self-hosted Supabase
+        # Automatische Content-Type-Erkennung
+        content_type = mimetypes.guess_type(filename)[0] or "image/png"
+        
+        # Detaillierte Debug-Informationen
         logging.info(f"Uploading to Supabase bucket: {bucket_name}, path: {storage_path}")
         logging.info(f"Supabase URL: {os.getenv('SUPABASE_URL')}")
+        logging.info(f"Detected content type: {content_type}")
         
-        # Upload the image with updated API usage - angepasst für self-hosted Supabase
+        # Upload the image mit expliziten Parametern
         try:
-            res = supabase.storage.from_(bucket_name).upload(
+            # Die storage.from_ Methode neu aufrufen und mit named arguments arbeiten
+            bucket = supabase.storage.from_(bucket_name)
+            
+            # Explizite Parameter für mehr Stabilität
+            res = bucket.upload(
                 path=storage_path,
                 file=file_stream,
-                file_options={"content-type": "image/png"}
+                file_options={"content-type": content_type}
             )
             logging.info(f"Upload response: {res}")
         except Exception as upload_err:
             logging.error(f"Upload error details: {str(upload_err)}")
+            # Detaillierte Fehlerinformationen
+            if hasattr(upload_err, 'message'):
+                logging.error(f"Error message: {upload_err.message}")
+            if hasattr(upload_err, 'code'):
+                logging.error(f"Error code: {upload_err.code}")
             raise
         
+        # Erfolgsvalidierung
         if not res:
-            logging.error(f"Supabase upload failed: {res}")
-            raise Exception(f"Failed to upload image to Supabase: {res}")
+            logging.error(f"Supabase upload returned empty response")
+            raise Exception("Failed to upload image to Supabase: Empty response")
         
-        # Get the public URL for the uploaded image - angepasst für self-hosted Supabase
+        # Get the public URL for the uploaded image
         try:
-            # Erste Methode: Versuche, die eingebaute get_public_url-Methode zu verwenden
-            public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+            # Verwende die neueste API-Methode für Public URLs
+            bucket = supabase.storage.from_(bucket_name)
+            public_url = bucket.get_public_url(storage_path)
+            
             logging.info(f"Generated public URL via API: {public_url}")
             
-            # Wenn URL nicht korrekt erscheint, erstelle sie manuell
+            # Wenn die URL leer oder ungültig ist, erstelle sie manuell
             if not public_url or "null" in public_url:
-                # Für self-hosted Supabase manuell eine URL erstellen für öffentlichen Zugriff
                 base_url = os.getenv("SUPABASE_URL").rstrip("/")
                 
-                # Version 1: Standard-Pfad für Supabase Storage
+                # Standard-Pfad für Supabase Storage
                 public_url = f"{base_url}/storage/v1/object/public/{bucket_name}/{storage_path}"
-                logging.info(f"Generated custom public URL v1: {public_url}")
-                
-                # Alternative URLs ausprobieren
-                alternate_url = f"{base_url}/storage/v1/object/{bucket_name}/{storage_path}"
-                logging.info(f"Alternative URL v2: {alternate_url}")
-                
-                # Noch eine Alternative
-                alt_url3 = f"{base_url}/api/rest/public-url?bucket={bucket_name}&object={storage_path}"
-                logging.info(f"Alternative URL v3: {alt_url3}")
+                logging.info(f"Generated custom public URL: {public_url}")
         except Exception as url_err:
             logging.error(f"Error getting public URL: {url_err}")
-            # Fallback: Manuell eine URL erstellen
+            # Fallback: URL manuell erstellen
             base_url = os.getenv("SUPABASE_URL").rstrip("/")
             public_url = f"{base_url}/storage/v1/object/public/{bucket_name}/{storage_path}"
-            logging.info(f"Fallback to custom public URL: {public_url}")
+            logging.info(f"Fallback to manual public URL: {public_url}")
         
+        # Final validation
         if not public_url:
             raise Exception("Failed to generate public URL for Supabase object")
         
@@ -177,6 +194,38 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
     except Exception as e:
         logging.error(f"Error uploading image to Supabase: {e}")
         raise Exception(f"Failed to upload image to Supabase: {str(e)}")
+
+def ensure_bucket_exists(supabase: Client, bucket_name: str) -> bool:
+    """
+    Ensures that the specified bucket exists, and attempts to create it if it doesn't.
+    
+    Args:
+        supabase: The Supabase client
+        bucket_name: Name of the bucket to check/create
+        
+    Returns:
+        bool: True if bucket exists or was created, False otherwise
+    """
+    try:
+        # Get list of all buckets
+        buckets = supabase.storage.list_buckets()
+        
+        # Check if bucket already exists
+        bucket_exists = any(bucket.name == bucket_name for bucket in buckets)
+        
+        if bucket_exists:
+            logging.info(f"Bucket '{bucket_name}' already exists")
+            return True
+            
+        # Bucket doesn't exist, try to create it
+        logging.info(f"Bucket '{bucket_name}' does not exist, attempting to create it")
+        supabase.storage.create_bucket(bucket_name, options={"public": True})
+        logging.info(f"Successfully created bucket '{bucket_name}'")
+        return True
+            
+    except Exception as e:
+        logging.error(f"Error checking/creating bucket '{bucket_name}': {e}")
+        return False
 
 def get_storage_mode() -> str:
     """

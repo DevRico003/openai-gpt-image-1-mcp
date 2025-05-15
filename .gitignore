@@ -37,3 +37,4 @@ ai-images/
 *.log
 
 **/.claude/settings.local.json
+.mcp.json

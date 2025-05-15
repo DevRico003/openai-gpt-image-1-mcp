@@ -68,6 +68,22 @@ if STORAGE_MODE == "supabase":
         # Test-Initialisierung des Clients
         _test_client = get_supabase_client()
         logging.info("Supabase client test initialization successful")
+        
+        # Teste auch die Storage-Funktionalität und erstelle Bucket wenn nötig
+        try:
+            from utils import ensure_bucket_exists
+            bucket_name = os.getenv("SUPABASE_BUCKET", "images")
+            
+            # Prüfe, ob der Bucket existiert und erstelle ihn wenn nötig
+            if ensure_bucket_exists(_test_client, bucket_name):
+                logging.info(f"Successfully verified or created Supabase bucket: {bucket_name}")
+            else:
+                logging.warning(f"Could not ensure bucket '{bucket_name}' exists, but continuing anyway")
+                
+        except Exception as bucket_err:
+            logging.warning(f"Could not verify Supabase bucket access: {bucket_err}")
+            # Wir setzen hier nicht auf lokalen Speicher zurück, da möglicherweise nur 
+            # Berechtigungsprobleme für die Bucket-Liste vorliegen, aber Upload trotzdem funktionieren könnte
     except Exception as e:
         logging.error(f"Supabase initialization failed, falling back to local storage: {e}")
         STORAGE_MODE = "local"

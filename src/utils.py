@@ -81,25 +81,49 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
         supabase = get_supabase_client()
         bucket_name = os.getenv("SUPABASE_BUCKET", "image")
         
+        # Sanitize filename - remove special characters and replace spaces with underscores
+        # Convert to ASCII to remove non-ASCII characters like umlauts
+        import re
+        import unicodedata
+        
+        def sanitize_filename(name):
+            # Remove accents and convert to ASCII
+            name_ascii = unicodedata.normalize('NFKD', name)
+            name_ascii = ''.join([c for c in name_ascii if not unicodedata.combining(c)])
+            
+            # Replace remaining non-alphanumeric chars (except for .png extension) with underscore
+            name_safe = re.sub(r'[^\w\.-]', '_', name_ascii)
+            return name_safe
+        
+        safe_filename = sanitize_filename(filename)
+        logging.info(f"Sanitized filename for Supabase: {safe_filename}")
+        
         # Generate a unique path for the image to prevent conflicts
         timestamp = int(time.time())
         unique_id = str(uuid.uuid4())[:8]
         folder_path = f"openai-images/{timestamp}-{unique_id}"
-        storage_path = f"{folder_path}/{filename}"
+        storage_path = f"{folder_path}/{safe_filename}"
         
-        # Upload the image
+        # Prepare file stream for upload
+        from io import BytesIO
+        file_stream = BytesIO(image_bytes)
+        
+        # Upload the image with updated API usage
         res = supabase.storage.from_(bucket_name).upload(
             path=storage_path,
-            file=image_bytes,
+            file=file_stream,
             file_options={"content-type": "image/png"}
         )
         
-        if not res.get("Key"):
+        if not res:
             logging.error(f"Supabase upload failed: {res}")
             raise Exception(f"Failed to upload image to Supabase: {res}")
         
         # Get the public URL for the uploaded image
         public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+        
+        if not public_url:
+            raise Exception("Failed to get public URL from Supabase")
         
         logging.info(f"Image uploaded successfully to Supabase: {public_url}")
         return public_url, storage_path

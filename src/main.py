@@ -214,16 +214,19 @@ async def generate_image(
             # Wenn Supabase-Storage aktiviert ist, hochladen und URL zurückgeben
             if STORAGE_MODE == "supabase":
                 try:
-                    # Upload the image to Supabase
+                    # Upload the image to Supabase (dies verwendet jetzt die verbesserte Funktion mit Dateinamen-Säuberung)
                     public_url, storage_path = await upload_image_to_supabase(image_bytes, final_filename)
                     
-                    # Add Supabase info to result
-                    result["storage_mode"] = "supabase"
-                    result["image_url"] = public_url
-                    result["storage_path"] = storage_path
-                    result["download_url"] = public_url
-                    
-                    logging.info(f"Image uploaded to Supabase: {public_url}")
+                    # Wenn der Upload erfolgreich war, geben wir KEIN Base64 zurück, um das Token-Limit nicht zu überschreiten
+                    # stattdessen nur die URL und Pfadinformationen
+                    return {
+                        "status": "success", 
+                        "storage_mode": "supabase",
+                        "filename": final_filename,
+                        "image_url": public_url,
+                        "storage_path": storage_path,
+                        "download_url": public_url
+                    }
                 except Exception as supabase_err:
                     logging.error(f"Supabase upload failed, falling back to local storage: {supabase_err}")
                     # Fall back to local storage if Supabase upload fails
@@ -233,8 +236,10 @@ async def generate_image(
                     result["directory"] = str(IMAGES_DIR)
                     result["error_message"] = f"Supabase upload failed: {str(supabase_err)}"
                     
-                    # Füge Bilddaten hinzu, wenn gewünscht
-                    if return_image:
+                    # Füge Bilddaten hinzu, wenn gewünscht UND das Bild nicht zu groß ist
+                    # Für große Bilder (high quality) geben wir KEIN Base64 zurück
+                    is_large_image = size in ["1536x1024", "1024x1536"] or quality == "high"
+                    if return_image and not is_large_image:
                         result["image_data"] = image_b64
                         result["mime_type"] = "image/png"
             else:
@@ -244,8 +249,9 @@ async def generate_image(
                 result["relative_path"] = relative_path
                 result["directory"] = str(IMAGES_DIR)
                 
-                # Füge Bilddaten hinzu, wenn gewünscht
-                if return_image:
+                # Füge Bilddaten hinzu, wenn gewünscht UND das Bild nicht zu groß ist
+                is_large_image = size in ["1536x1024", "1024x1536"] or quality == "high"
+                if return_image and not is_large_image:
                     result["image_data"] = image_b64
                     result["mime_type"] = "image/png"
                 
@@ -422,16 +428,19 @@ async def edit_image(
             # Wenn Supabase-Storage aktiviert ist, hochladen und URL zurückgeben
             if STORAGE_MODE == "supabase":
                 try:
-                    # Upload the image to Supabase
+                    # Upload the image to Supabase (dies verwendet jetzt die verbesserte Funktion mit Dateinamen-Säuberung)
                     public_url, storage_path = await upload_image_to_supabase(image_bytes, final_filename)
                     
-                    # Add Supabase info to result
-                    result["storage_mode"] = "supabase"
-                    result["image_url"] = public_url
-                    result["storage_path"] = storage_path
-                    result["download_url"] = public_url
-                    
-                    logging.info(f"Image uploaded to Supabase: {public_url}")
+                    # Wenn der Upload erfolgreich war, geben wir KEIN Base64 zurück, um das Token-Limit nicht zu überschreiten
+                    # stattdessen nur die URL und Pfadinformationen
+                    return {
+                        "status": "success", 
+                        "storage_mode": "supabase",
+                        "filename": final_filename,
+                        "image_url": public_url,
+                        "storage_path": storage_path,
+                        "download_url": public_url
+                    }
                 except Exception as supabase_err:
                     logging.error(f"Supabase upload failed, falling back to local storage: {supabase_err}")
                     # Fall back to local storage if Supabase upload fails
@@ -441,8 +450,10 @@ async def edit_image(
                     result["directory"] = str(IMAGES_DIR)
                     result["error_message"] = f"Supabase upload failed: {str(supabase_err)}"
                     
-                    # Füge Bilddaten hinzu, wenn gewünscht
-                    if return_image:
+                    # Füge Bilddaten hinzu, wenn gewünscht UND das Bild nicht zu groß ist
+                    # Für große Bilder (high quality) geben wir KEIN Base64 zurück
+                    is_large_image = size in ["1536x1024", "1024x1536"] or quality == "high"
+                    if return_image and not is_large_image:
                         result["image_data"] = image_b64
                         result["mime_type"] = "image/png"
             else:
@@ -452,8 +463,9 @@ async def edit_image(
                 result["relative_path"] = relative_path
                 result["directory"] = str(IMAGES_DIR)
                 
-                # Füge Bilddaten hinzu, wenn gewünscht
-                if return_image:
+                # Füge Bilddaten hinzu, wenn gewünscht UND das Bild nicht zu groß ist
+                is_large_image = size in ["1536x1024", "1024x1536"] or quality == "high"
+                if return_image and not is_large_image:
                     result["image_data"] = image_b64
                     result["mime_type"] = "image/png"
                 

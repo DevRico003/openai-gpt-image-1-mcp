@@ -36,6 +36,7 @@ def get_openai_client():
 def get_supabase_client() -> Client:
     """
     Creates and returns a Supabase client with the appropriate credentials.
+    Supports both hosted Supabase and self-hosted installations.
     
     Returns:
         Client: The initialized Supabase client
@@ -51,9 +52,19 @@ def get_supabase_client() -> Client:
         logging.error("FATAL: SUPABASE_URL and SUPABASE_KEY environment variables must be set.")
         sys.exit("Supabase credentials not found. Please set the SUPABASE_URL and SUPABASE_KEY environment variables.")
     
+    # Log detailed info to help with troubleshooting
+    logging.info(f"Initializing Supabase client with URL: {supabase_url}")
+    
     # Create and return client
     try:
-        client = create_client(supabase_url, supabase_key)
+        # Ensure URL doesn't have trailing slash
+        supabase_url = supabase_url.rstrip("/")
+        
+        # Create client with specific headers for self-hosted Supabase
+        client = create_client(supabase_url, supabase_key, {
+            "X-Client-Info": "openai-gpt-image-1-mcp"
+        })
+        
         logging.info("Supabase client initialized successfully.")
         return client
     except Exception as e:
@@ -108,22 +119,47 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
         from io import BytesIO
         file_stream = BytesIO(image_bytes)
         
-        # Upload the image with updated API usage
-        res = supabase.storage.from_(bucket_name).upload(
-            path=storage_path,
-            file=file_stream,
-            file_options={"content-type": "image/png"}
-        )
+        # Detaillierte Debug-Informationen für self-hosted Supabase
+        logging.info(f"Uploading to Supabase bucket: {bucket_name}, path: {storage_path}")
+        logging.info(f"Supabase URL: {os.getenv('SUPABASE_URL')}")
+        
+        # Upload the image with updated API usage - angepasst für self-hosted Supabase
+        try:
+            res = supabase.storage.from_(bucket_name).upload(
+                path=storage_path,
+                file=file_stream,
+                file_options={"content-type": "image/png"}
+            )
+            logging.info(f"Upload response: {res}")
+        except Exception as upload_err:
+            logging.error(f"Upload error details: {str(upload_err)}")
+            raise
         
         if not res:
             logging.error(f"Supabase upload failed: {res}")
             raise Exception(f"Failed to upload image to Supabase: {res}")
         
-        # Get the public URL for the uploaded image
-        public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+        # Get the public URL for the uploaded image - angepasst für self-hosted Supabase
+        try:
+            # Erste Methode: Versuche, die eingebaute get_public_url-Methode zu verwenden
+            public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+            logging.info(f"Generated public URL via API: {public_url}")
+            
+            # Wenn URL nicht korrekt erscheint, erstelle sie manuell
+            if not public_url or "null" in public_url:
+                # Für self-hosted Supabase manuell eine URL erstellen
+                base_url = os.getenv("SUPABASE_URL").rstrip("/")
+                public_url = f"{base_url}/storage/v1/object/public/{bucket_name}/{storage_path}"
+                logging.info(f"Generated custom public URL: {public_url}")
+        except Exception as url_err:
+            logging.error(f"Error getting public URL: {url_err}")
+            # Fallback: Manuell eine URL erstellen
+            base_url = os.getenv("SUPABASE_URL").rstrip("/")
+            public_url = f"{base_url}/storage/v1/object/public/{bucket_name}/{storage_path}"
+            logging.info(f"Fallback to custom public URL: {public_url}")
         
         if not public_url:
-            raise Exception("Failed to get public URL from Supabase")
+            raise Exception("Failed to generate public URL for Supabase object")
         
         logging.info(f"Image uploaded successfully to Supabase: {public_url}")
         return public_url, storage_path

@@ -102,7 +102,7 @@ If you want to use Supabase for image storage:
 
 1. Create a Supabase account at [supabase.com](https://supabase.com/)
 2. Create a new project and get your project URL and service key
-3. Create a storage bucket named `image` (or choose a different name and set it in `SUPABASE_BUCKET`)
+3. Create a storage bucket named `images`
 4. Make sure public access is enabled for the bucket if you want the images to be publicly accessible
 
 ## Running the Server

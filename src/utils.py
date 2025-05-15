@@ -90,7 +90,7 @@ async def upload_image_to_supabase(image_bytes: bytes, filename: str) -> Tuple[s
     try:
         # Get Supabase client and bucket name
         supabase = get_supabase_client()
-        bucket_name = os.getenv("SUPABASE_BUCKET", "image")
+        bucket_name = os.getenv("SUPABASE_BUCKET", "images")
         
         # Sanitize filename - remove special characters and replace spaces with underscores
         # Convert to ASCII to remove non-ASCII characters like umlauts

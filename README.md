@@ -183,17 +183,20 @@ result = await generate_image(
     quality="high"
 )
 
-# The image is returned as base64 data that can be used client-side
-image_base64 = result['image_base64']
+# The result contains URLs to access the image
+image_url = result['image_url']        # Direct URL to view the image
+download_url = result['download_url']  # URL to download the image
 filename = result['filename']
-mime_type = result['mime_type']  # "image/png"
 
-# Example of saving the image on the client side
-import base64
-with open(f"local-{filename}", "wb") as f:
-    f.write(base64.b64decode(image_base64))
+print(f"Image generated successfully!")
+print(f"View the image at: {image_url}")
+print(f"Download the image from: {download_url}")
 
-print(f"Image saved locally as: local-{filename}")
+# Example of displaying the image in a web application
+html_img = f'<img src="{image_url}" alt="Flying cat">'
+
+# Example of creating a download link
+html_download = f'<a href="{download_url}" download="{filename}">Download Image</a>'
 ```
 
 ### Editing an Image
@@ -207,23 +210,43 @@ result = await edit_image(
     quality="high"
 )
 
-# Use the base64 data to display or save the image on the client side
-image_base64 = result['image_base64']
-filename = result['filename']
+# Access the edited image via the provided URLs
+image_url = result['image_url']
+download_url = result['download_url']
 
-# Example of displaying the image in HTML
-html_img = f'<img src="data:image/png;base64,{image_base64}" alt="Edited cat with wizard hat">'
+# Example of downloading the image programmatically in Python
+import requests
+response = requests.get(download_url)
+with open(f"local-{result['filename']}", "wb") as f:
+    f.write(response.content)
 ```
 
 ### Client-Side Image Handling
 
-The MCP server returns image data in base64 format, allowing the client to:
+The MCP server provides two URLs for each generated image:
 
-1. **Save the image locally** by decoding the base64 string
-2. **Display the image** directly in applications that support data URLs
-3. **Pass the image to other services** without needing to access the Docker container's filesystem
+1. **`image_url`**: Direct URL to view the image in a browser or embed in HTML
+2. **`download_url`**: URL to download the image with proper filename and content-disposition headers
 
-This approach ensures that even when the MCP server runs in a Docker container, clients can still access and use the generated images.
+This approach ensures that:
+- Clients can access images without token size limitations
+- Images can be easily shared or embedded in applications
+- Images remain accessible even when the MCP server runs in a Docker container
+- No need to decode base64 data on the client side
+
+### Setting the Public URL
+
+If your MCP server is running behind a proxy or has a different public address than the binding address, 
+you should set the `PUBLIC_URL` environment variable to ensure the returned URLs are correct:
+
+```
+PUBLIC_URL=https://your-public-domain.com
+```
+
+This is particularly important when:
+- Running in Docker with port mappings
+- Using a reverse proxy like Nginx
+- Accessing the server through a custom domain name
 
 ## License
 

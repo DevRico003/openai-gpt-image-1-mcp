@@ -10,7 +10,15 @@ import os
 import re
 import sys
 import time
+import uuid
+import urllib.parse
 from typing import Literal, Optional, List
+from pathlib import Path
+
+# Import FastAPI components for static file serving
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 # Import OpenAI components
 from openai import AsyncOpenAI, APIConnectionError, RateLimitError, APIStatusError
@@ -48,14 +56,37 @@ async def openai_image_lifespan(server: FastMCP) -> AsyncIterator[OpenAIImageCon
         # No explicit cleanup needed for the OpenAI client
         pass
 
+# Define constants for images directory and public URL
+IMAGES_DIR = Path("ai-images")
+IMAGES_DIR.mkdir(exist_ok=True)
+
+# Get server host and port from environment variables
+HOST = os.getenv("HOST", "0.0.0.0")
+PORT = os.getenv("PORT", "8050")
+PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://{HOST}:{PORT}")
+
 # Initialize FastMCP server with the OpenAI client as context
 mcp = FastMCP(
     "openai-gpt-image-1",
     description="MCP server for OpenAI GPT Image generation and editing capabilities",
     lifespan=openai_image_lifespan,
-    host=os.getenv("HOST", "0.0.0.0"),
-    port=os.getenv("PORT", "8050")
-)        
+    host=HOST,
+    port=PORT
+)
+
+# Get the FastAPI app from FastMCP to add static file serving
+app = mcp.get_app()
+
+# Mount static files directory for serving generated images
+app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
+
+# Add a download endpoint for downloading images by filename
+@app.get("/download/{filename}")
+async def download_image(filename: str):
+    file_path = IMAGES_DIR / filename
+    if not file_path.exists():
+        return {"error": "File not found"}
+    return FileResponse(path=str(file_path), filename=filename, media_type="image/png")
 
 @mcp.tool()
 async def generate_image(
@@ -87,8 +118,8 @@ async def generate_image(
         - status: "success" or "error"
         - saved_path: Local path where image was saved
         - filename: Generated filename
-        - image_base64: Base64 encoded image data for client-side usage
-        - mime_type: Image MIME type ("image/png")
+        - image_url: Direct URL to view the image
+        - download_url: URL to download the image
         Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'generate_image' called with prompt: '{prompt[:50]}...'")
@@ -157,13 +188,17 @@ async def generate_image(
                  f.write(image_bytes)
             logging.info(f"Image successfully saved to: {full_save_path}")
             
-            # Return success, path and base64 data for client-side usage
+            # Generate URLs for direct access and download
+            image_url = f"{PUBLIC_URL}/images/{final_filename}"
+            download_url = f"{PUBLIC_URL}/download/{final_filename}"
+            
+            # Return success, paths and URLs for client-side usage
             return {
                 "status": "success", 
                 "saved_path": full_save_path,
                 "filename": final_filename,
-                "image_base64": image_b64,
-                "mime_type": "image/png"
+                "image_url": image_url,
+                "download_url": download_url
             }
 
         except Exception as save_e:
@@ -219,8 +254,8 @@ async def edit_image(
         - status: "success" or "error"
         - saved_path: Local path where image was saved
         - filename: Generated filename
-        - image_base64: Base64 encoded image data for client-side usage
-        - mime_type: Image MIME type ("image/png")
+        - image_url: Direct URL to view the image
+        - download_url: URL to download the image
         Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'edit_image' called with prompt: '{prompt[:50]}...'")
@@ -310,13 +345,17 @@ async def edit_image(
                 f.write(image_bytes)
             logging.info(f"Edited image successfully saved to: {full_save_path}")
             
-            # Return success, path and base64 data for client-side usage
+            # Generate URLs for direct access and download
+            image_url = f"{PUBLIC_URL}/images/{final_filename}"
+            download_url = f"{PUBLIC_URL}/download/{final_filename}"
+            
+            # Return success, paths and URLs for client-side usage
             return {
                 "status": "success", 
                 "saved_path": full_save_path,
                 "filename": final_filename,
-                "image_base64": image_b64,
-                "mime_type": "image/png"
+                "image_url": image_url,
+                "download_url": download_url
             }
 
         except Exception as save_e:

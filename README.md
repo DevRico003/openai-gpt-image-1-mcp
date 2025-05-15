@@ -183,20 +183,18 @@ result = await generate_image(
     quality="high"
 )
 
-# The result contains URLs to access the image
-image_url = result['image_url']        # Direct URL to view the image
-download_url = result['download_url']  # URL to download the image
-filename = result['filename']
+# The result contains paths to the saved image
+saved_path = result['saved_path']     # Absolute path where the image was saved
+relative_path = result['relative_path']  # Relative path from working directory
+filename = result['filename']         # The filename of the generated image
+directory = result['directory']       # The directory where images are stored
 
 print(f"Image generated successfully!")
-print(f"View the image at: {image_url}")
-print(f"Download the image from: {download_url}")
+print(f"Image saved at: {saved_path}")
+print(f"Relative path: {relative_path}")
 
-# Example of displaying the image in a web application
-html_img = f'<img src="{image_url}" alt="Flying cat">'
-
-# Example of creating a download link
-html_download = f'<a href="{download_url}" download="{filename}">Download Image</a>'
+# If you're running a client on the same machine or with access to the 
+# server's filesystem, you can use these paths to access the generated image
 ```
 
 ### Editing an Image
@@ -210,43 +208,29 @@ result = await edit_image(
     quality="high"
 )
 
-# Access the edited image via the provided URLs
-image_url = result['image_url']
-download_url = result['download_url']
+# Access the edited image path information
+saved_path = result['saved_path']
+relative_path = result['relative_path']
+filename = result['filename']
 
-# Example of downloading the image programmatically in Python
-import requests
-response = requests.get(download_url)
-with open(f"local-{result['filename']}", "wb") as f:
-    f.write(response.content)
+print(f"Edited image saved at: {saved_path}")
 ```
 
 ### Client-Side Image Handling
 
-The MCP server provides two URLs for each generated image:
+The MCP server saves generated images in the 'ai-images' directory and returns paths to these images. This approach is designed for situations where:
 
-1. **`image_url`**: Direct URL to view the image in a browser or embed in HTML
-2. **`download_url`**: URL to download the image with proper filename and content-disposition headers
+1. The client has direct filesystem access to the server (e.g., when running locally)
+2. The client and server use a shared filesystem (e.g., with mounted volumes in Docker)
+3. The data returned by the MCP server is passed to another process with access to the server's filesystem
 
-This approach ensures that:
-- Clients can access images without token size limitations
-- Images can be easily shared or embedded in applications
-- Images remain accessible even when the MCP server runs in a Docker container
-- No need to decode base64 data on the client side
+For Docker deployments, you can use volume mounts to make the images directory accessible to the host:
 
-### Setting the Public URL
-
-If your MCP server is running behind a proxy or has a different public address than the binding address, 
-you should set the `PUBLIC_URL` environment variable to ensure the returned URLs are correct:
-
-```
-PUBLIC_URL=https://your-public-domain.com
+```bash
+docker run -v $(pwd)/ai-images:/app/ai-images --env-file .env -p 8050:8050 openai-gpt-image-1-mcp
 ```
 
-This is particularly important when:
-- Running in Docker with port mappings
-- Using a reverse proxy like Nginx
-- Accessing the server through a custom domain name
+This will make generated images available in the `ai-images` directory on your host machine.
 
 ## License
 

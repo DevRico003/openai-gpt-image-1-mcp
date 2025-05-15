@@ -15,10 +15,7 @@ import urllib.parse
 from typing import Literal, Optional, List
 from pathlib import Path
 
-# Import FastAPI components for static file serving
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+# Wir brauchen diese Imports nicht mehr, da wir keine FastAPI-Endpoints verwenden
 
 # Import OpenAI components
 from openai import AsyncOpenAI, APIConnectionError, RateLimitError, APIStatusError
@@ -56,14 +53,13 @@ async def openai_image_lifespan(server: FastMCP) -> AsyncIterator[OpenAIImageCon
         # No explicit cleanup needed for the OpenAI client
         pass
 
-# Define constants for images directory and public URL
+# Define constants for images directory
 IMAGES_DIR = Path("ai-images")
 IMAGES_DIR.mkdir(exist_ok=True)
 
 # Get server host and port from environment variables
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = os.getenv("PORT", "8050")
-PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://{HOST}:{PORT}")
 
 # Initialize FastMCP server with the OpenAI client as context
 mcp = FastMCP(
@@ -74,19 +70,18 @@ mcp = FastMCP(
     port=PORT
 )
 
-# Get the FastAPI app from FastMCP to add static file serving
-app = mcp.get_app()
+# Da FastMCP keine get_app()-Methode bietet, verwenden wir eine einfachere Methode:
+# Statt direkter URL-Bereitstellung erstellen wir eine Datei-ID-basierte Zuordnung und 
+# stellen den Pfad im Dateisystem bereit, den der Client dann mit lokalen Mitteln öffnen kann
 
-# Mount static files directory for serving generated images
-app.mount("/images", StaticFiles(directory=str(IMAGES_DIR)), name="images")
-
-# Add a download endpoint for downloading images by filename
-@app.get("/download/{filename}")
-async def download_image(filename: str):
-    file_path = IMAGES_DIR / filename
-    if not file_path.exists():
-        return {"error": "File not found"}
-    return FileResponse(path=str(file_path), filename=filename, media_type="image/png")
+# Funktion zur Generierung von relativen Pfaden aus dem aktuellen Arbeitsverzeichnis
+def get_relative_path(absolute_path):
+    try:
+        # Versuche, einen relativen Pfad zu erstellen
+        return os.path.relpath(absolute_path)
+    except:
+        # Falls das nicht funktioniert, gib den absoluten Pfad zurück
+        return absolute_path
 
 @mcp.tool()
 async def generate_image(
@@ -116,10 +111,10 @@ async def generate_image(
     Returns:
         A dictionary containing:
         - status: "success" or "error"
-        - saved_path: Local path where image was saved
+        - saved_path: Absolute path where image was saved
+        - relative_path: Relative path to the image from working directory
         - filename: Generated filename
-        - image_url: Direct URL to view the image
-        - download_url: URL to download the image
+        - directory: Directory where images are stored
         Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'generate_image' called with prompt: '{prompt[:50]}...'")
@@ -188,17 +183,16 @@ async def generate_image(
                  f.write(image_bytes)
             logging.info(f"Image successfully saved to: {full_save_path}")
             
-            # Generate URLs for direct access and download
-            image_url = f"{PUBLIC_URL}/images/{final_filename}"
-            download_url = f"{PUBLIC_URL}/download/{final_filename}"
+            # Erstelle einen relativen Pfad für die Datei
+            relative_path = get_relative_path(full_save_path)
             
-            # Return success, paths and URLs for client-side usage
+            # Return success und Pfadinformationen
             return {
                 "status": "success", 
                 "saved_path": full_save_path,
+                "relative_path": relative_path,
                 "filename": final_filename,
-                "image_url": image_url,
-                "download_url": download_url
+                "directory": str(IMAGES_DIR)
             }
 
         except Exception as save_e:
@@ -252,10 +246,10 @@ async def edit_image(
     Returns:
         A dictionary containing:
         - status: "success" or "error"
-        - saved_path: Local path where image was saved
+        - saved_path: Absolute path where image was saved
+        - relative_path: Relative path to the image from working directory
         - filename: Generated filename
-        - image_url: Direct URL to view the image
-        - download_url: URL to download the image
+        - directory: Directory where images are stored
         Or an error dictionary if the API call or saving fails.
     """
     logging.info(f"Tool 'edit_image' called with prompt: '{prompt[:50]}...'")
@@ -345,17 +339,16 @@ async def edit_image(
                 f.write(image_bytes)
             logging.info(f"Edited image successfully saved to: {full_save_path}")
             
-            # Generate URLs for direct access and download
-            image_url = f"{PUBLIC_URL}/images/{final_filename}"
-            download_url = f"{PUBLIC_URL}/download/{final_filename}"
+            # Erstelle einen relativen Pfad für die Datei
+            relative_path = get_relative_path(full_save_path)
             
-            # Return success, paths and URLs for client-side usage
+            # Return success und Pfadinformationen
             return {
                 "status": "success", 
                 "saved_path": full_save_path,
+                "relative_path": relative_path,
                 "filename": final_filename,
-                "image_url": image_url,
-                "download_url": download_url
+                "directory": str(IMAGES_DIR)
             }
 
         except Exception as save_e:
